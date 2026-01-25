@@ -1,0 +1,44 @@
+# Gurobi solver behavior analysis configuration file
+
+# Solving parameters
+solve:
+  time_limit: 300  # Solving time limit (seconds)
+  threads: 256     # Number of threads, set to 1 for determinism
+  mip_gap: 1e-4   # MIP tolerance
+  seed: 42       # Random seed, ensure reproducibility
+
+# Gurobi specific parameters
+gurobi:
+  log_to_console: 0  # Do not output to console
+  output_flag: 1     # Ensure log generation
+  presolve: -1       # Default presolve (-1 for auto)
+  mip_focus: 0       # Default MIP focus
+  heuristics: 0.5    # Default heuristic setting
+  cuts: -1           # Default cut setting (-1 for auto)
+  
+  # Enhanced logging and diagnosis settings
+  log_file_append: 0  # Overwrite log file instead of appending
+  diagnostics: 1      # Enable diagnosis
+  display_interval: 1 # Update display every how many seconds
+  
+  # Heuristic details
+  heuristics_freq: 1   # More frequent application of heuristics
+  output_heuristics: 1 # Output more heuristic information (custom parameter, implemented in code)
+  use_callback: true   # Whether to use callback function to get more detailed information
+
+# Path configuration
+paths:
+  instances_dir: ${hydra:runtime.cwd}/data/item_placement_1000  # Instance directory, using relative path
+  output_dir: ${hydra:runtime.cwd}/outputs/solver_info  # Result output directory
+
+# Output configuration
+output:
+  save_results: true  # Whether to save results
+  result_filename: "solver_info.csv"  # Result file name (CSV format for ease of subsequent analysis)
+  save_plots: true    # Whether to save visualization charts
+  plot_filename: "solver_info_plot.png"  # Chart file name
+
+# Logging configuration
+logging:
+  level: INFO  # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"  # Logging format

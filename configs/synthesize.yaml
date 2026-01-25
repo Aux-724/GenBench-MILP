@@ -1,0 +1,70 @@
+# Ecole instance synthesis configuration file
+# Used to control various parameters for synthesizing MILP instances
+
+# Basic configuration
+seed: 24  # Random seed
+output_dir: "${hydra:runtime.cwd}/data/raw"  # Output directory to store generated instances
+
+# Shared parameters for all problem types
+general:
+  num_instances: 300  # Number of instances to generate for each problem type
+
+# Instance size range parameters
+size_ranges:
+  min_constraints: 5
+  max_constraints: 50
+  min_variables: 10
+  max_variables: 100
+  min_density: 0.05
+  max_density: 0.3
+
+# Problem types and their specific parameters
+problems:
+  # Set Cover problem configuration
+  set_cover:
+    enabled: true
+    min_constraints: 10
+    max_constraints: 50
+    min_variables: 20
+    max_variables: 100
+    min_density: 0.1
+    max_density: 0.4
+  
+  # Capacitated Facility Location problem configuration
+  capacitated_facility_location:
+    enabled: false
+    ratio: 0.5
+    min_constraints: 50    
+    max_constraints: 150   
+    min_variables: 500     
+    max_variables: 5000    
+    min_density: 0.01      
+    max_density: 0.3       
+  
+  # Combinatorial Auction problem configuration
+  combinatorial_auction:
+    enabled: false
+    n_items: null  # Optional: keep auto-calculated
+    min_value: 1
+    max_value: 100
+    min_constraints: 50    # keep unchanged
+    max_constraints: 200   # keep unchanged
+    min_variables: 80      # reduced to 80
+    max_variables: 600     # increased to 600
+    min_density: 0.02      # keep unchanged
+    max_density: 0.1       # keep unchanged
+  
+  # Independent Set problem configuration
+  independent_set:
+    enabled: true
+    min_variables: 480    
+    max_variables: 520
+    min_density: 0.01      
+    max_density: 0.015
+
+# Hydra configuration
+hydra:
+  run:
+    dir: "${hydra:runtime.cwd}/outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}"
+  job:
+    chdir: true

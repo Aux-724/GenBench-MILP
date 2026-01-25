@@ -1,0 +1,31 @@
+# Instance similarity and feasibility comparison configuration file
+
+# Path configuration
+paths:
+  set1_dir: ${hydra:runtime.cwd}/data/dataset1  # First set of instance collection directory (original instances)
+  set2_dir: ${hydra:runtime.cwd}/data/dataset2  # Second set of instance collection directory (generated instances)
+  output_dir: ${hydra:runtime.cwd}/outputs/instance_similarity/${now:%Y-%m-%d_%H-%M-%S}  # Result output directory, using current time as subdirectory
+
+# Compute parameters
+compute:
+  num_workers: 64  # Number of parallel computing worker processes, set to null to use all available CPU
+  num_samples: 1000  # Number of samples used for similarity calculation (no limit on the total number of instances processed, used for random sampling in JS divergence calculation)
+  time_limit: 300  # Gurobi solver time limit (seconds)
+
+# Analysis configuration
+analysis:
+  compute_similarity: true  # Whether to compute instance structure similarity
+  compute_feasibility: false  # Whether to compute instance feasibility
+
+# Output configuration
+output:
+  result_filename: "similarity_results.json"  # Similarity result file name
+  feasibility_filename: "feasibility_results.txt"  # Feasibility result file name
+  save_plots: true  # Whether to save similarity heatmaps
+  plot_filename: "similarity_heatmap.png"  # Chart file name
+  include_comparison_info: true  # Whether to include comparison information in the file name
+
+# Logging configuration
+logging:
+  level: INFO  # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"  # Logging format

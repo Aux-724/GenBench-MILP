@@ -1,0 +1,21 @@
+# HiGHS heuristic comparison configuration
+
+# Path configurations
+paths:
+  csv_file1: ${hydra:runtime.cwd}/outputs/highs_solver_info/independent_set_part1/solver_info.csv
+  csv_file2: ${hydra:runtime.cwd}/outputs/highs_solver_info/independent_set_part2/solver_info.csv
+  output_dir: ${hydra:runtime.cwd}/outputs/highs_compare_heuristic
+
+# Comparison configuration
+comparison:
+  name1: independent_set_part1
+  name2: independent_set_part2
+
+# PCA configuration
+pca:
+  n_components: 2
+
+# Logging configuration
+logging:
+  level: INFO
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"

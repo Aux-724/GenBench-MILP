@@ -1,0 +1,42 @@
+# Basic scientific computing
+numpy==1.24.3 
+matplotlib==3.7.5
+pandas==2.0.3
+scikit-learn==1.3.2
+scipy==1.10.1
+seaborn==0.13.2
+sympy==1.13.3
+
+# Configuration management
+hydra-core==1.3.2
+omegaconf==2.3.0
+PyYAML==6.0.2
+
+# Progress and tools
+tqdm==4.67.1
+cloudpickle==3.1.1
+psutil==7.0.0
+networkx==3.1
+
+# Mathematical optimization solver
+gurobipy==11.0.1
+PySCIPOpt==5.4.1  # SCIP solver interface
+PuLP==3.1.1  # Linear programming model construction
+ecole 
+
+# Machine learning framework
+torch==2.4.1
+torch-geometric==2.6.1
+tensorflow==2.10.0
+tensorboardX==2.6.2.2
+
+# Hyperparameter optimization and search
+smac==1.4.0
+ConfigSpace==0.6.0
+pynisher==0.6.4
+pyrfr==0.9.0
+
+# Distributed computing
+dask==2023.5.0
+distributed==2023.5.0
+dask-jobqueue==0.8.5

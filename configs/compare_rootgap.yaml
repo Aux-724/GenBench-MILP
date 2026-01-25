@@ -1,0 +1,61 @@
+# Configuration file for comparing root_gap distributions of different datasets
+
+# Path configuration
+paths:
+  # CSV file path for the first dataset
+  csv_file1: "${hydra:runtime.cwd}/outputs/solver_info/acmmilp_mis_0.1/solver_info.csv"
+  # CSV file path for the second dataset
+  csv_file2: "${hydra:runtime.cwd}/outputs/solver_info/independent_set/solver_info.csv"
+  # Output directory
+  output_dir: "${hydra:runtime.cwd}/outputs/rootgap_comparison"
+
+# Comparison configuration
+comparison:
+  # Display name for dataset 1
+  name1: "ACM_MIS_0.1"
+  # Display name for dataset 2
+  name2: "Independent_Set"
+  # Sampling method, options: "all" or "sample"
+  sampling: "all"
+  # Sample size if using sampling
+  sample_size: 100
+
+# Visualization configuration
+visualization:
+  # Whether to generate visualization charts
+  enabled: true
+  # Chart title
+  title: "Root Gap Distribution Comparison"
+  # Chart filename
+  filename: "rootgap_comparison.png"
+  # Number of bins for histogram
+  bins: 30
+  # Chart style
+  style: "seaborn-v0_8-darkgrid"
+  # Chart dimensions
+  figure_size: [12, 8]
+
+# Output configuration
+output:
+  # Whether to save results to CSV
+  save_csv: true
+  # Result CSV filename
+  result_filename: "comparison_results.csv"
+  # Whether to print detailed information
+  verbose: true
+
+# Random seed for sampling
+seed: 42
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Default settings override
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${paths.output_dir}/${now:%Y-%m-%d_%H-%M-%S}
+  output_subdir: null

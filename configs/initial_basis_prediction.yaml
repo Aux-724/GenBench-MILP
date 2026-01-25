@@ -1,0 +1,48 @@
+# Initial basis prediction experiment configuration file
+
+# Training configuration
+training:
+  epochs: 800  # Number of training epochs
+  batch_size: 32  # Batch size
+  learning_rate: 1e-3  # Initial learning rate
+  weight_decay: 1e-4  # Weight decay
+  early_stopping: 50  # Early stopping patience
+  save_dir: ${hydra:runtime.cwd}/outputs/initial_basis_models  # Model save directory
+  seed: 42  # Random seed for reproducibility
+
+# Dataset configuration
+datasets:
+  train_dir: ${hydra:runtime.cwd}/data/raw/independent_set  # Training MILP dataset
+  test_dir: ${hydra:runtime.cwd}/data/gurobi_test/independent_set  # Test MILP dataset
+  train_ratio: 0.8  # Training set ratio (within train_dir)
+  val_ratio: 0.2  # Validation set ratio (within train_dir)
+  max_instances: 1000  # Maximum number of instances to process
+
+# GNN model configuration
+model:
+  num_layers: 3  # GNN number of layers
+  hidden_dim: 128  # Hidden layer dimension
+  dropout: 0.1  # Dropout rate
+  device: "cuda:0"  # Training device, set to "cpu" if no GPU
+
+# Model path configuration
+custom_models:
+  model_path: ${hydra:runtime.cwd}/outputs/basis_model_dataset1/basis_prediction_model.pth  # Default path to pre-trained model
+
+# Gurobi evaluation configuration
+evaluation:
+  time_limit: 600  # Solution time limit (seconds)
+  mip_gap: 0.01  # MIP gap
+  threads: 256  # Number of threads
+  results_dir: ${hydra:runtime.cwd}/outputs/initial_basis_results  # Results save directory
+  visualize_results: true  # Whether to generate visualization results
+  # Basis repair related configuration
+  basis_repair:
+    pivot_threshold: 1e-12  # Threshold for valid pivots, pivots below this value are considered invalid (reduce to 1e-12 to tolerate small pivots)
+    max_iterations: 50  # Maximum number of iterations for repair loop (increase to 50 for higher repair success rate)
+    debug_level: DEBUG  # Basis repair log level (DEBUG provides more detailed information)
+
+# Logging configuration
+logging:
+  level: INFO  # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"  # Logging format

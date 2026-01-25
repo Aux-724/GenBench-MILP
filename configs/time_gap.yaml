@@ -1,0 +1,34 @@
+# Configuration file for time gap metric
+
+# Solving parameters
+solve:
+  time_limit: 300  # Solving time limit (in seconds), null means no limit
+  threads: 256  # Number of threads used for solving
+
+# Path configuration
+paths:
+  training_instances_dir: ${hydra:runtime.cwd}/data/raw  # Training instance directory, using relative path
+  generated_instances_dir: ${hydra:runtime.cwd}/data/generated  # Generated instance directory, using relative path
+  output_dir: ${hydra:runtime.cwd}/outputs/time_gap  # Result output directory
+  
+  # Path configuration for calculate_instance_solving_time.py script
+  instances_dir: ${hydra:runtime.cwd}/data/raw/independent_set  # Single instance set directory, using relative path
+
+# Output configuration
+output:
+  save_results: true  # Whether to save results
+  result_filename: "time_gap_results.json"  # Result file name
+  save_plots: true  # Whether to save visualization charts
+  plot_filename: "time_gap_plot.png"  # Chart file name
+
+# Configuration for calculate_instance_solving_time.py script
+calculate_instance:
+  skip_solve: false  # Whether to skip solving process, only read existing results
+  max_instances: null  # Maximum number of instances to solve, null means read all instances
+  html_report: true  # Whether to generate HTML report
+  random_seed: 42  # Random seed, used for random sampling of instances
+
+# Logging configuration
+logging:
+  level: INFO  # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"  # Logging format

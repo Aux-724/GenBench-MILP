@@ -1,0 +1,33 @@
+# HiGHS solver behavior analysis configuration
+
+# Solving parameters
+solve:
+  time_limit: 300
+  threads: 1
+  mip_gap: 1e-4
+  seed: 42
+
+# HiGHS specific parameters
+highs:
+  log_to_console: false
+  output_flag: true
+  presolve: choose
+  mip_heuristic_effort: 0.05
+  log_dev_level: 2
+  mip_report_level: 2
+  parallel: off
+
+# Path configuration
+paths:
+  instances_dir: ${hydra:runtime.cwd}/data/independent_set_part1
+  output_dir: ${hydra:runtime.cwd}/outputs/highs_solver_info
+
+# Output configuration
+output:
+  save_results: true
+  result_filename: "solver_info.csv"
+
+# Logging configuration
+logging:
+  level: INFO
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"

@@ -1,0 +1,52 @@
+# SCIP solver behavior analysis configuration file
+
+# Solving parameters
+solve:
+  time_limit: 100  # Solving time limit (seconds)
+  threads: 1       # Number of threads, set to 1 for determinism
+  mip_gap: 1e-4   # MIP tolerance
+  seed: 42        # Random seed, ensure reproducibility
+
+# SCIP specific parameters
+scip:
+  # Core solving parameters
+  limits_time: 100              # Time limit in seconds
+  limits_gap: 1e-4             # Gap tolerance
+  randomization_randomseedshift: 42  # Random seed
+  parallel_maxnthreads: 1      # Number of threads
+  
+  # Presolving parameters
+  presolving_maxrounds: -1     # Maximum presolving rounds (-1 for auto)
+  presolving_maxrestarts: -1   # Maximum presolving restarts (-1 for auto)
+  
+  # Heuristics parameters
+  heuristics_emphasis: "default"  # Heuristics emphasis: "off", "fast", "default", "aggressive"
+  
+  # Cutting planes parameters
+  separating_maxrounds: -1     # Maximum separation rounds (-1 for auto)
+  separating_maxroundsroot: -1 # Maximum separation rounds at root (-1 for auto)
+  
+  # Display parameters
+  display_verblevel: 4         # Verbosity level (0-5, 4 for detailed output)
+  display_freq: 1              # Display frequency
+  
+  # Logging parameters
+  write_statistics: true       # Write detailed statistics
+  write_logfile: true         # Enable log file writing
+
+# Path configuration
+paths:
+  instances_dir: ${hydra:runtime.cwd}/data/test_item_placement  # Instance directory, using relative path
+  output_dir: ${hydra:runtime.cwd}/outputs/scip_solver_info  # Result output directory
+
+# Output configuration
+output:
+  save_results: true  # Whether to save results
+  result_filename: "scip_solver_info.csv"  # Result file name (CSV format for ease of subsequent analysis)
+  save_plots: true    # Whether to save visualization charts
+  plot_filename: "scip_solver_info_plot.png"  # Chart file name
+
+# Logging configuration
+logging:
+  level: INFO  # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"  # Logging format

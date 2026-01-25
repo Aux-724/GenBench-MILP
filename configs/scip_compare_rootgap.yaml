@@ -1,0 +1,39 @@
+# SCIP Root Gap comparison configuration
+
+# Input data paths
+data:
+  dataset1_path: "outputs/scip_part1_final_complete/scip_experiment_20250727_164302/scip_solver_info.csv"  # Path to first dataset CSV
+  dataset2_path: "outputs/scip_part2_final_complete/scip_experiment_20250727_165211/scip_solver_info.csv"  # Path to second dataset CSV
+  dataset1_name: "Independent Set Part 1"    # Display name for first dataset
+  dataset2_name: "Independent Set Part 2"   # Display name for second dataset
+
+# Analysis parameters
+analysis:
+  root_gap_column: "root_gap"          # Column name for root gap data
+  remove_outliers: true                # Whether to remove outliers
+  outlier_method: "iqr"                # Outlier removal method: "iqr" or "zscore"
+  outlier_threshold: 1.5               # Threshold for outlier removal (IQR multiplier or Z-score)
+
+# Visualization parameters
+visualization:
+  figure_size: [12, 8]                 # Figure size [width, height]
+  bins: 30                             # Number of histogram bins
+  alpha: 0.7                           # Transparency for histograms
+  colors: ["skyblue", "lightcoral"]    # Colors for the two datasets
+  save_plots: true                     # Whether to save plots
+
+# Statistical analysis
+statistics:
+  confidence_level: 0.95               # Confidence level for statistical tests
+  bootstrap_samples: 1000              # Number of bootstrap samples for confidence intervals
+
+# Output configuration
+output:
+  save_results: true                   # Whether to save comparison results
+  result_filename: "scip_rootgap_comparison.json"  # Result file name
+  plot_filename: "scip_rootgap_comparison.png"     # Plot file name
+
+# Logging configuration
+logging:
+  level: INFO
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"

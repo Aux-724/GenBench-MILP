@@ -1,0 +1,27 @@
+# Configuration file for branching nodes metric
+# Used to configure the calculation parameters of the branching nodes metric
+
+solve:
+  time_limit: 300    # Time limit for solving (in seconds), set to 300 seconds to prevent a single instance from taking too long, set to null for no limit
+  threads: 1         # Number of threads used by each Gurobi instance, recommended to set to 1 in parallel mode
+  parallel:
+    enabled: true    # Whether to enable parallel processing
+    processes: 64     # Number of processes used, recommended to set to (CPU core count - 2) to avoid system resource exhaustion
+
+paths:
+  training_instances_dir: "${hydra:runtime.cwd}/data/raw/independent_set"         # Training instance directory
+  generated_instances_dir: "${hydra:runtime.cwd}/data/acm-milp_mis_eta0.1"  # Generated instance directory
+  output_dir: "${hydra:runtime.cwd}/outputs/branching_nodes/${now:%Y-%m-%d_%H-%M-%S}"  # Result output directory
+  
+  # for single dataset
+  instances_dir: "${hydra:runtime.cwd}/data/raw/independent_set"
+
+output:
+  save_results: true             # Whether to save results
+  result_filename: "branching_nodes_results.json"  # Result file name
+  save_plots: false               # Whether to save plots
+  plot_filename: "branching_nodes_plot.png"        # Plot file name
+
+logging:
+  level: "INFO"  # Logging level: DEBUG, INFO, WARNING, ERROR
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"  # Logging format

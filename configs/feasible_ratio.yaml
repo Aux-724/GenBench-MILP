@@ -1,0 +1,34 @@
+# Configuration file for feasible ratio metric
+time_limit: 300  # Time limit for solving (in seconds)
+threads: 64  # Number of threads used for solving
+parallel: true  # Whether to enable parallel processing
+n_jobs: null  # Number of parallel jobs, set to null for CPU core count - 1
+
+# Result directory
+result_dir: "outputs/feasible_ratio"
+
+# Single dataset instance directory
+single:
+  dir: "data/raw/independent_set"  # Directory containing instances to calculate feasible ratio
+  output_dir: "outputs/feasible_ratio/{now:%Y-%m-%d_%H-%M-%S}"  # Output directory
+
+# Comparison instance directory
+compare:
+  original_dir: "data/raw"  # Original instance directory
+  generated_dir: "data/generated"  # Generated instance directory
+  output_dir: "outputs/feasible_ratio/{now:%Y-%m-%d_%H-%M-%S}"  # Output directory
+
+# Hydra configuration
+hydra:
+  run:
+    dir: "${hydra:runtime.cwd}/outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}"
+  job:
+    # Disable changing working directory to avoid relative path resolution errors
+    chdir: false
+  sweep:
+    dir: "${hydra:runtime.cwd}/multirun/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}"
+    subdir: ${hydra.job.num}
+  job_logging:
+    root:
+      level: INFO
+      

@@ -1,0 +1,68 @@
+# Gurobi hyperparameter tuning training configuration
+# For single instance set tuning and testing
+
+# SMAC3 tuning parameters
+tuning:
+  mode: "custom"  # Tuning mode: "training", "generated", "both", "custom"
+  n_trials: 50  # Number of trials for SMAC3 - Reduced to 50 for faster tuning
+  random_seed: 42  # Random seed for reproducibility
+  smac_output_dir: ${hydra:runtime.cwd}/outputs/smac3  # SMAC3 output directory
+
+# Solving parameters
+solve:
+  time_limit: 60  # Time limit for solving (in seconds) - Reduced to 60 seconds for faster evaluation
+  threads: 256  # Number of threads used for solving
+
+# Evaluation settings
+evaluation:
+  repeat: 1  # Number of times each instance is solved - Reduced to 1 for faster evaluation
+  test_evaluation: true  # Whether to evaluate on the test set
+
+# Path configuration
+paths:
+  custom_instances_dir: ${hydra:runtime.cwd}/data/acmmilp_mis_0.05  # Training instance directory
+  test_instances_dir: ${hydra:runtime.cwd}/data/gurobi_test/independent_set  # Test instance directory
+  output_dir: ${hydra:runtime.cwd}/outputs/gurobi_tuning_single  # Result output directory
+
+# Hyperparameter space definition
+param_space:
+  # MIP related parameters
+  Heuristics:
+    type: float
+    range: [0.0, 1.0]
+  MIPFocus:
+    type: integer
+    values: [0, 1, 2, 3]
+  VarBranch:
+    type: integer
+    values: [-1, 0, 1, 2, 3]
+  BranchDir:
+    type: integer
+    values: [-1, 0, 1]
+  # Preprocessing related parameters
+  Presolve:
+    type: integer
+    values: [-1, 0, 1, 2]
+  PrePasses:
+    type: integer
+    values: [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+  # MIP cut related parameters
+  Cuts:
+    type: integer
+    values: [-1, 0, 1, 2, 3]
+  # Other parameters
+  Method:
+    type: integer
+    values: [-1, 0, 1, 2, 3, 4, 5]
+
+# Output configuration
+output:
+  save_results: true  # Whether to save results
+  result_filename: "gurobi_tuning_results.json"  # Result file name
+  save_plots: true  # Whether to save visualization charts
+  plot_filename: "gurobi_tuning_plot.png"  # Chart file name
+
+# Logging configuration
+logging:
+  level: INFO  # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"  # Logging format

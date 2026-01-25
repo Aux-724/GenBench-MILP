@@ -1,0 +1,72 @@
+# Cutting Plane Usage Analysis Configuration
+# This configuration file is used for comparing cutting plane usage patterns between different datasets
+
+# Default values for the comparison
+defaults:
+  - _self_
+
+# Random seed for reproducibility
+seed: 42
+
+# Logging configuration
+logging:
+  level: INFO
+  format: "%(asctime)s [%(levelname)s] %(message)s"
+
+# Path configurations
+paths:
+  # Path to the first CSV file
+  csv_file1: ${hydra:runtime.cwd}/outputs/solver_info/acmmilp_mis_0.1/solver_info.csv
+  
+  # Path to the second CSV file
+  csv_file2: ${hydra:runtime.cwd}/outputs/solver_info/independent_set/solver_info.csv
+  
+  # Output directory for comparison results
+  output_dir: ${hydra:runtime.cwd}/outputs/cutplane_comparison/${comparison.name1}_vs_${comparison.name2}
+
+# Comparison configuration
+comparison:
+  # Names for the datasets (used in plots and result files)
+  name1: acmmilp_mis_0.1
+  name2: independent_set
+
+# PCA configuration
+pca:
+  # Number of principal components to retain
+  n_components: 3
+  
+  # Scaling method ('standard' for Z-score normalization, 'minmax' for Min-Max scaling)
+  scaling: standard
+
+# Visualization configuration
+visualization:
+  # Whether to generate visualization
+  enabled: true
+  
+  # Visualization title
+  title: "Cutting Plane Usage Pattern Comparison (PCA)"
+  
+  # Output filename for the visualization
+  filename: cutplane_pca_comparison.png
+  
+  # Figure size (width, height)
+  figure_size: [14, 10]
+
+# Output configuration
+output:
+  # Whether to save verbose output
+  verbose: true
+  
+  # Whether to save results to CSV
+  save_csv: true
+  
+  # Output filename for the results
+  result_filename: cutplane_pca_results.csv
+
+# Hydra configuration
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: ${paths.output_dir}
+  output_subdir: ${paths.output_dir}/.hydra
