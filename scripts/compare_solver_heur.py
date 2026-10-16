@@ -41,10 +41,15 @@ def load_data(csv_file_path: str) -> pd.DataFrame:
     
     df = pd.read_csv(csv_file_path)
     
-    # Verify that the required column exists
+    # All-read-error solver-info outputs can contain no heuristic counters at
+    # all. Keep those datasets comparable by treating heuristic usage as zero.
     heur_columns = [col for col in df.columns if col.startswith('heur_')]
     if not heur_columns:
-        raise ValueError(f"No heuristic columns found in {csv_file_path}")
+        logging.warning(
+            "No heuristic columns found in %s; treating heuristic usage as zero",
+            csv_file_path,
+        )
+        df['heur_FoundHeuristic'] = 0
         
     return df
 
@@ -67,11 +72,14 @@ def prepare_data(df1: pd.DataFrame, df2: pd.DataFrame,
     Returns:
         Tuple of prepared arrays (data1, data2)
     """
-    # Check if the column exists in both dataframes
+    # Some solver logs expose a different heuristic counter name, or no counter
+    # for read-error rows. Missing requested counters are zero for comparison.
     if heur_column not in df1.columns:
-        raise ValueError(f"Column {heur_column} not found in first dataset")
+        logging.warning("Column %s not found in first dataset; using zeros", heur_column)
+        df1[heur_column] = 0
     if heur_column not in df2.columns:
-        raise ValueError(f"Column {heur_column} not found in second dataset")
+        logging.warning("Column %s not found in second dataset; using zeros", heur_column)
+        df2[heur_column] = 0
     
     # Extract the columns
     data1 = df1[heur_column].fillna(0).values

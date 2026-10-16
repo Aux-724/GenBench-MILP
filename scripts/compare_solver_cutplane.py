@@ -46,10 +46,9 @@ def load_data(csv_file_path: str) -> pd.DataFrame:
     
     df = pd.read_csv(csv_file_path)
     
-    # Verify that cut plane columns exist
     cut_columns = [col for col in df.columns if col.startswith('cut_')]
     if not cut_columns:
-        raise ValueError(f"No cutting plane columns found in {csv_file_path}")
+        logging.warning(f"No cutting plane columns found in {csv_file_path}; treating usage as zero where needed")
         
     return df
 
@@ -69,6 +68,11 @@ def prepare_cut_data(df1: pd.DataFrame, df2: pd.DataFrame) -> Tuple[pd.DataFrame
     cut_columns1 = [col for col in df1.columns if col.startswith('cut_')]
     cut_columns2 = [col for col in df2.columns if col.startswith('cut_')]
     all_cut_columns = sorted(list(set(cut_columns1 + cut_columns2)))
+    if not all_cut_columns:
+        logging.warning("No cutting plane columns found in either dataset; using a zero-valued placeholder")
+        all_cut_columns = ['cut_None']
+        df1['cut_None'] = 0
+        df2['cut_None'] = 0
     
     logging.info(f"Found {len(all_cut_columns)} cutting plane types: {', '.join(all_cut_columns)}")
     
@@ -158,8 +162,19 @@ def apply_pca(df1: pd.DataFrame, df2: pd.DataFrame, cut_columns: List[str],
     # Fit and transform the combined data
     X_scaled = scaler.fit_transform(X_combined)
     
+    max_components = min(n_components, X_scaled.shape[0], X_scaled.shape[1])
+    if max_components < n_components:
+        logging.warning(
+            "Requested %s PCA components, but only %s are available for "
+            "n_samples=%s and n_features=%s",
+            n_components,
+            max_components,
+            X_scaled.shape[0],
+            X_scaled.shape[1],
+        )
+
     # Apply PCA
-    pca = PCA(n_components=n_components)
+    pca = PCA(n_components=max_components)
     X_pca = pca.fit_transform(X_scaled)
     
     # Split back into the two original datasets
@@ -167,7 +182,7 @@ def apply_pca(df1: pd.DataFrame, df2: pd.DataFrame, cut_columns: List[str],
     X2_pca = X_pca[len(X1):]
     
     # Create DataFrames with PCA results
-    pca_cols = [f'PC{i+1}' for i in range(n_components)]
+    pca_cols = [f'PC{i+1}' for i in range(max_components)]
     pca_df1 = pd.DataFrame(X1_pca, columns=pca_cols)
     pca_df2 = pd.DataFrame(X2_pca, columns=pca_cols)
     
@@ -322,7 +337,12 @@ def save_pca_results(pca_df1: pd.DataFrame, pca_df2: pd.DataFrame,
     combined_df.to_csv(output_path, index=False)
     
     # Also save the Wasserstein distances
-    distances_df = pd.DataFrame(list(wasserstein_distances.items()), columns=['Principal_Component', 'Wasserstein_Distance'])
+    for i in range(1, 4):
+        wasserstein_distances.setdefault(f'PC{i}', np.nan)
+    distances_df = pd.DataFrame(
+        sorted(wasserstein_distances.items()),
+        columns=['Principal_Component', 'Wasserstein_Distance'],
+    )
     distances_path = output_path.replace('.csv', '_distances.csv')
     distances_df.to_csv(distances_path, index=False)
     

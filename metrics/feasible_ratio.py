@@ -3,7 +3,9 @@
 
 import os
 import logging
+import time
 import numpy as np
+from collections import Counter
 from typing import Dict, List, Any, Optional, Union, Tuple
 import gurobipy as gp
 from gurobipy import GRB
@@ -64,43 +66,33 @@ class FeasibleRatioMetric:
         if self.parallel and total_count > 1:
             # Parallel processing of instances
             logging.info(f"Using parallel calculation mode, number of parallel tasks: {self.n_jobs}")
-            # Use process pool for parallel processing
-            results = self._parallel_check_feasibility(instances)
-            
-            # Merge results
-            feasible_count = sum(1 for result in results if result[1])
-            instance_results = [
-                {
-                    "instance": self._get_instance_name(instance_path),
-                    "path": instance_path,
-                    "feasible": is_feasible
-                }
-                for instance_path, is_feasible in results
-            ]
+            instance_results = self._parallel_check_feasibility_details(instances)
         else:
             # Sequential processing of instances
             logging.info("Using sequential calculation mode")
-            feasible_count = 0
             
-            # Create Gurobi environment and disable all output
-            env = gp.Env(empty=True)
-            env.setParam("OutputFlag", 0)
-            env.start()
-            
-            # Add progress bar
-            for instance_path in tqdm(instances, desc="Checking instance feasibility and boundedness", ncols=100):
-                # Check the feasibility of the instance
-                is_feasible = self._check_feasibility(instance_path, env)
-                instance_name = self._get_instance_name(instance_path)
-                
-                if is_feasible:
-                    feasible_count += 1
-                
-                instance_results.append({
-                    "instance": instance_name,
-                    "path": instance_path,
-                    "feasible": is_feasible
-                })
+            try:
+                # Create Gurobi environment and disable all output. If the
+                # environment itself cannot start, preserve that as a solver
+                # error for every requested instance.
+                env = gp.Env(empty=True)
+                env.setParam("OutputFlag", 0)
+                env.start()
+            except Exception as exc:
+                logging.error(f"Error starting Gurobi environment: {exc}")
+                instance_results = [
+                    self._error_result(instance_path, exc, 0.0)
+                    for instance_path in instances
+                ]
+            else:
+                # Add progress bar
+                for instance_path in tqdm(instances, desc="Checking instance feasibility and boundedness", ncols=100):
+                    instance_results.append(self._check_feasibility_details(instance_path, env))
+                env.dispose()
+
+        feasible_count = sum(1 for result in instance_results if result["feasible"])
+        status_counts = Counter(result.get("status", "UNKNOWN") for result in instance_results)
+        error_counts = Counter(result.get("error", "") for result in instance_results if result.get("error"))
         
         # Calculate feasibility ratio
         if total_count > 0:
@@ -115,73 +107,127 @@ class FeasibleRatioMetric:
             "details": {
                 "feasible_count": feasible_count,
                 "total_count": total_count,
+                "timeout_count": status_counts.get("TIME_LIMIT", 0),
+                "error_count": sum(error_counts.values()),
+                "status_counts": dict(status_counts),
+                "error_counts": dict(error_counts),
                 "instance_results": instance_results
             }
         }
-    
-    def _check_feasibility(self, instance_path: str, env: Optional[gp.Env] = None) -> bool:
+
+    @staticmethod
+    def _status_name(status_code: int) -> str:
+        names = [
+            "LOADED",
+            "OPTIMAL",
+            "INFEASIBLE",
+            "INF_OR_UNBD",
+            "UNBOUNDED",
+            "CUTOFF",
+            "ITERATION_LIMIT",
+            "NODE_LIMIT",
+            "TIME_LIMIT",
+            "SOLUTION_LIMIT",
+            "INTERRUPTED",
+            "NUMERIC",
+            "SUBOPTIMAL",
+            "INPROGRESS",
+            "USER_OBJ_LIMIT",
+            "WORK_LIMIT",
+            "MEM_LIMIT",
+        ]
+        status_names = {getattr(GRB, name): name for name in names if hasattr(GRB, name)}
+        return status_names.get(status_code, f"STATUS_{status_code}")
+
+    def _error_result(self, instance_path: str, error: Exception, runtime_sec: float) -> Dict[str, Any]:
+        return {
+            "instance": self._get_instance_name(instance_path),
+            "path": instance_path,
+            "feasible": False,
+            "status": "ERROR",
+            "status_code": "",
+            "runtime_sec": round(runtime_sec, 6),
+            "sol_count": "",
+            "error": str(error),
+        }
+
+    @staticmethod
+    def _safe_model_attr(model: gp.Model, attr: str, default: Any = "") -> Any:
+        try:
+            return getattr(model, attr)
+        except Exception:
+            return default
+
+    def _check_feasibility_details(self, instance_path: str, env: Optional[gp.Env] = None) -> Dict[str, Any]:
         """
-        Check the feasibility and boundedness of an instance by solving it.
-        
-        Args:
-            instance_path: Path to the instance file
-            env: Optional Gurobi environment, if provided, use it, otherwise create a new one
-            
-        Returns:
-            True if the instance is feasible and bounded, otherwise False
+        Check feasibility and boundedness and preserve solver status details.
         """
+        start_time = time.monotonic()
+        owned_env = False
+        model = None
+
         try:
             # If no environment is provided, create a new Gurobi environment
             if env is None:
                 env = gp.Env(empty=True)
                 env.setParam("OutputFlag", 0)
                 env.start()
-            
+                owned_env = True
+
             # Load model using the created environment
             model = gp.read(instance_path, env=env)
-            
+
             # Set solving parameters
             if self.time_limit is not None:
                 model.setParam("TimeLimit", self.time_limit)
             model.setParam("Threads", self.threads)
             model.setParam("LogToConsole", 0)
-            
+
             # Solve the model
             model.optimize()
-            
-            # Get the status code
-            status = model.Status
-            
-            # Determine feasibility based on status code
-            # Status code description:
-            # GRB.OPTIMAL (2) - Found optimal solution
-            # GRB.INFEASIBLE (3) - Problem has no solution
-            # GRB.UNBOUNDED (5) - Problem is unbounded
-            # GRB.SUBOPTIMAL (12) - Found suboptimal solution
-            # GRB.TIME_LIMIT (9) - Reached time limit
-            
-            is_feasible = False
-            
-            if status == GRB.OPTIMAL:
-                is_feasible = True
-            elif status == GRB.INFEASIBLE or status == GRB.INF_OR_UNBD:
-                is_feasible = False
-            elif status == GRB.UNBOUNDED:
-                # Unbounded problem although has feasible solution, but now requires "feasible and bounded", so consider it as not feasible
-                is_feasible = False
-            elif status == GRB.SUBOPTIMAL:
-                # Found suboptimal solution, problem is feasible
-                is_feasible = True
-            elif status == GRB.TIME_LIMIT:
-                # Time limit reached, cannot determine boundedness, strictly consider it as not feasible
-                is_feasible = False
-            
-            return is_feasible
-        
+
+            status_code = model.Status
+            status = self._status_name(status_code)
+
+            # The metric is feasible-and-bounded. A time limit with an incumbent
+            # is still not certified bounded, so it is not counted as valid here.
+            is_feasible = status_code in (GRB.OPTIMAL, GRB.SUBOPTIMAL)
+
+            return {
+                "instance": self._get_instance_name(instance_path),
+                "path": instance_path,
+                "feasible": is_feasible,
+                "status": status,
+                "status_code": status_code,
+                "runtime_sec": round(time.monotonic() - start_time, 6),
+                "sol_count": self._safe_model_attr(model, "SolCount", ""),
+                "error": "",
+            }
+
         except Exception as e:
-            # Record specific error information
+            # Preserve solver/environment errors separately from mathematical
+            # infeasibility so summaries cannot report license failures as 0%.
             logging.error(f"Error checking instance {instance_path}: {e}")
-            return False
+            return self._error_result(instance_path, e, time.monotonic() - start_time)
+
+        finally:
+            if model is not None:
+                model.dispose()
+            if owned_env and env is not None:
+                env.dispose()
+
+    def _check_feasibility(self, instance_path: str, env: Optional[gp.Env] = None) -> bool:
+        """
+        Check the feasibility and boundedness of an instance by solving it.
+
+        Args:
+            instance_path: Path to the instance file
+            env: Optional Gurobi environment, if provided, use it, otherwise create a new one
+
+        Returns:
+            True if the instance is feasible and bounded, otherwise False
+        """
+        return self._check_feasibility_details(instance_path, env)["feasible"]
             
     def _parallel_check_feasibility(self, instances: List[str]) -> List[Tuple[str, bool]]:
         """
@@ -213,6 +259,28 @@ class FeasibleRatioMetric:
                     logging.error(f"Error checking instance {instance_path}: {e}")
                     results.append((instance_path, False))
         
+        return results
+
+    def _parallel_check_feasibility_details(self, instances: List[str]) -> List[Dict[str, Any]]:
+        """
+        Parallel check feasibility while retaining per-instance solver statuses.
+        """
+        results = []
+
+        # Dynamically adjust chunk size based on number of instances
+        total_instances = len(instances)
+        chunksize = max(1, min(100, total_instances // (self.n_jobs * 2)))
+
+        with ProcessPoolExecutor(max_workers=self.n_jobs) as executor:
+            futures_iterator = executor.map(self._check_feasibility_details, instances, chunksize=chunksize)
+            for result in tqdm(
+                futures_iterator,
+                total=len(instances),
+                desc="Parallel checking instance feasibility and boundedness",
+                ncols=100,
+            ):
+                results.append(result)
+
         return results
     
     @staticmethod

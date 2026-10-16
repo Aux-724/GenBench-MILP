@@ -33,7 +33,11 @@ problems:
   # Capacitated Facility Location problem configuration
   capacitated_facility_location:
     enabled: false
-    ratio: 0.5
+    # Keep the number-of-facilities choice separate from Ecole's capacity
+    # scaling parameter.  Ecole defines its `ratio` argument as total facility
+    # capacity / total customer demand, not facilities / customers.
+    facility_customer_ratio: 0.5
+    capacity_demand_ratio: 5.0
     min_constraints: 50    
     max_constraints: 150   
     min_variables: 500     

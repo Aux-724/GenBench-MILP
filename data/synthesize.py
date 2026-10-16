@@ -185,7 +185,8 @@ class CapacitatedFacilityLocationGenerator(BaseProblemGenerator):
         n_variables: int,
         density: float,
         seed: int,
-        ratio: Optional[float] = None,
+        facility_customer_ratio: float = 0.5,
+        capacity_demand_ratio: float = 5.0,
         **kwargs
     ) -> Tuple[ecole.scip.Model, Dict[str, Any]]:
         """
@@ -196,7 +197,10 @@ class CapacitatedFacilityLocationGenerator(BaseProblemGenerator):
             n_variables: Affects total number of variables (actual number may be larger)
             density: Not directly used, kept for consistency
             seed: Random seed
-            ratio: The ratio of facilities to customers
+            facility_customer_ratio: Number of facilities divided by the
+                number of customers.
+            capacity_demand_ratio: Total facility capacity divided by total
+                customer demand after Ecole scales the sampled capacities.
             
         Returns:
             The parameters
@@ -207,15 +211,24 @@ class CapacitatedFacilityLocationGenerator(BaseProblemGenerator):
         # Convert n_constraints and n_variables to facility and customer counts
         n_customers = max(int(n_constraints * 0.8), 5)  # Ensure at least 5 customers
         
-        # If ratio is None, use default value 0.5
-        ratio = 0.5 if ratio is None else ratio
-        n_facilities = max(int(n_customers * ratio), 2)  # Ensure at least 2 facilities
+        if facility_customer_ratio <= 0:
+            raise ValueError("facility_customer_ratio must be positive")
+        if capacity_demand_ratio < 1:
+            raise ValueError(
+                "capacity_demand_ratio must be at least 1 to avoid a "
+                "deterministically infeasible CFL instance"
+            )
+
+        n_facilities = max(
+            int(n_customers * facility_customer_ratio),
+            2,
+        )
         
         # Create generator
         generator = ecole.instance.CapacitatedFacilityLocationGenerator(
             n_customers=n_customers,
             n_facilities=n_facilities,
-            ratio=ratio,
+            ratio=capacity_demand_ratio,
         )
         
         # Synthesize instances
@@ -230,7 +243,8 @@ class CapacitatedFacilityLocationGenerator(BaseProblemGenerator):
             "n_facs": n_facilities,
             "n_cons": n_cons_actual,
             "n_vars": n_vars_actual,
-            "ratio": round(ratio, 2)
+            "facility_ratio": round(facility_customer_ratio, 2),
+            "capacity_ratio": round(capacity_demand_ratio, 2),
         }
         
         return model, params
@@ -390,8 +404,21 @@ def synthesize(config: DictConfig) -> None:
         specific_args = {}
         
         # Add problem-specific arguments
-        if prob_type == "capacitated_facility_location" and "ratio" in prob_config:
-            specific_args["ratio"] = prob_config.ratio
+        if prob_type == "capacitated_facility_location":
+            if "ratio" in prob_config:
+                raise ValueError(
+                    "The ambiguous CFL `ratio` option is no longer supported; "
+                    "use `facility_customer_ratio` and "
+                    "`capacity_demand_ratio`."
+                )
+            specific_args["facility_customer_ratio"] = prob_config.get(
+                "facility_customer_ratio",
+                0.5,
+            )
+            specific_args["capacity_demand_ratio"] = prob_config.get(
+                "capacity_demand_ratio",
+                5.0,
+            )
         elif prob_type == "combinatorial_auction":
             if "n_items" in prob_config:
                 specific_args["n_items"] = prob_config.n_items

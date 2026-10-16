@@ -54,13 +54,22 @@ def js_div(x1: np.ndarray, x2: np.ndarray) -> float:
     if x.std() < 1e-10:
         return 0.0
         
-    # Calculate the histogram of the combined distribution
-    M, bins = np.histogram(x, bins=5, density=True)
-    
-    # Calculate the histograms of the two distributions
+    # Use common bin edges, then normalize both histograms to probability
+    # masses. Mixing density and count histograms can make the derived
+    # "similarity" fall outside [0, 1].
+    _, bins = np.histogram(x, bins=5)
     P, _ = np.histogram(x1, bins=bins)
     Q, _ = np.histogram(x2, bins=bins)
-    
+
+    p_sum = P.sum()
+    q_sum = Q.sum()
+    if p_sum == 0 or q_sum == 0:
+        return 0.0
+
+    P = P / p_sum
+    Q = Q / q_sum
+    M = (P + Q) / 2
+
     # Calculate JS divergence
     return (entropy(P, M) + entropy(Q, M)) / 2
 

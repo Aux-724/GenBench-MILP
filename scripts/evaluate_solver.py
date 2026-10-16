@@ -19,6 +19,7 @@ from gurobipy import GRB
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 from datetime import datetime
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional
 from tqdm import tqdm
 
@@ -28,6 +29,115 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import the project metrics parsing module
 from metrics.solver_info import SolverInfoMetric
 from metrics.gurobi_callbacks import HeuristicCallback
+
+
+def solve_instance_for_solver_info(
+    instance_file: str,
+    gurobi_logs_dir: str,
+    gurobi_params: Dict[str, Any],
+    gurobi_cfg: Dict[str, Any],
+    metric_cfg: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Solve one instance and parse its Gurobi behavior log."""
+    instance_name = os.path.basename(instance_file).split(".")[0]
+    log_file = os.path.join(gurobi_logs_dir, f"{instance_name}.log")
+    model = None
+    env = None
+
+    try:
+        solver_metric = SolverInfoMetric(OmegaConf.create(metric_cfg))
+
+        env = gp.Env(empty=True)
+        for param, value in gurobi_params.items():
+            env.setParam(param, value)
+        env.start()
+
+        model = gp.read(instance_file, env)
+        model.setParam(GRB.Param.LogFile, log_file)
+        model.setParam(GRB.Param.LogToConsole, gurobi_cfg["log_to_console"])
+        model.setParam(GRB.Param.OutputFlag, gurobi_cfg["output_flag"])
+        model.setParam(GRB.Param.LogFile, log_file)
+        model.setParam(GRB.Param.Heuristics, gurobi_cfg["heuristics"])
+
+        try:
+            if hasattr(GRB.Param, "LogFileAppend"):
+                model.setParam(GRB.Param.LogFileAppend, gurobi_cfg["log_file_append"])
+        except Exception as exc:
+            logging.debug(f"Failed to set LogFileAppend: {str(exc)}")
+
+        try:
+            if hasattr(GRB.Param, "DisplayInterval"):
+                model.setParam(GRB.Param.DisplayInterval, gurobi_cfg["display_interval"])
+        except Exception as exc:
+            logging.debug(f"Failed to set DisplayInterval: {str(exc)}")
+
+        callbacks_active = False
+        heuristic_stats = {"success_count": {}}
+        if gurobi_cfg.get("use_callback", False):
+            try:
+                callback_log_file = os.path.join(gurobi_logs_dir, f"{instance_name}_heuristics.log")
+                heuristic_callback = HeuristicCallback(callback_log_file)
+                model.optimize(heuristic_callback)
+                callbacks_active = True
+                heuristic_stats = heuristic_callback.get_heuristic_stats()
+
+                if heuristic_stats["success_count"]:
+                    logging.debug(
+                        "Obtained %s heuristic success entries from the callback",
+                        len(heuristic_stats["success_count"]),
+                    )
+                    for method, count in heuristic_stats["success_count"].items():
+                        logging.debug("  - %s: %s successful calls", method, count)
+            except Exception as exc:
+                logging.error(f"Error executing callback function: {str(exc)}")
+                callbacks_active = False
+
+        if not callbacks_active:
+            model.optimize()
+
+        model.dispose()
+        env.dispose()
+        model = None
+        env = None
+
+        instance_result = solver_metric.analyze_log_file(log_file)
+
+        if callbacks_active and heuristic_stats["success_count"]:
+            for key in list(instance_result.keys()):
+                if key.startswith("heur_"):
+                    del instance_result[key]
+
+            for method, count in heuristic_stats["success_count"].items():
+                instance_result[f"heur_{method}"] = count
+
+            instance_result["solutions_found"] = heuristic_stats["solutions_found"]
+            if heuristic_stats["last_solution_method"]:
+                instance_result["last_solution_method"] = heuristic_stats["last_solution_method"]
+            instance_result["heuristic_data_source"] = "callback"
+        else:
+            instance_result["heuristic_data_source"] = "log_parsing"
+
+        instance_result["instance"] = instance_name
+        return instance_result
+
+    except Exception as exc:
+        logging.error(f"Error processing instance {instance_name}: {str(exc)}")
+        return {
+            "instance": instance_name,
+            "error": str(exc),
+        }
+    finally:
+        if model is not None:
+            try:
+                model.dispose()
+            except Exception:
+                pass
+        if env is not None:
+            try:
+                env.dispose()
+            except Exception:
+                pass
+
 
 @hydra.main(config_path="../configs", config_name="solver_info")
 def evaluate_solver(cfg: DictConfig):
@@ -78,6 +188,7 @@ def evaluate_solver(cfg: DictConfig):
     instance_files = []
     for ext in ["*.mps", "*.lp", "*.mps.gz", "*.lp.gz"]:
         instance_files.extend(glob.glob(os.path.join(instances_dir, ext)))
+    instance_files = sorted(instance_files)
     
     if not instance_files:
         logging.error(f"No MPS or LP instance files found in directory {instances_dir}")
@@ -104,121 +215,61 @@ def evaluate_solver(cfg: DictConfig):
         "Heuristics": cfg.gurobi.heuristics,
         "Cuts": cfg.gurobi.cuts
     }
-    
-    # Iterate through each instance, using tqdm to create a progress bar
+
+    gurobi_cfg = OmegaConf.to_container(cfg.gurobi, resolve=True)
+    metric_cfg = OmegaConf.to_container(cfg, resolve=True)
+    metric_cfg["paths"]["output_dir"] = output_dir
+    parallel_enabled = bool(OmegaConf.select(cfg, "solve.parallel.enabled", default=False))
+    requested_workers = int(OmegaConf.select(cfg, "solve.parallel.processes", default=1))
+    max_workers = max(1, min(requested_workers, len(instance_files), 150))
+
     logging.info("Starting to process instances...")
-    for instance_file in tqdm(instance_files, desc="Solving progress", ncols=100, colour="green"):
-        instance_name = os.path.basename(instance_file).split(".")[0]
-        
-        # Construct a unique log file path
-        log_file = os.path.join(gurobi_logs_dir, f"{instance_name}.log")
-        
-        try:
-            # Create the Gurobi environment and set parameters
-            env = gp.Env(empty=True)
-            for param, value in gurobi_params.items():
-                env.setParam(param, value)
-            env.start()
-            
-            # Read the instance
-            model = gp.read(instance_file, env)
-            
-            # Set the log file parameters
-            model.setParam(GRB.Param.LogFile, log_file)
-            
-            # Set other log parameters - use try-except to prevent errors from unsupported parameters
-            # Basic parameters
-            model.setParam(GRB.Param.LogToConsole, cfg.gurobi.log_to_console)
-            model.setParam(GRB.Param.OutputFlag, cfg.gurobi.output_flag)
-            model.setParam(GRB.Param.LogFile, log_file)
-            model.setParam(GRB.Param.Heuristics, cfg.gurobi.heuristics)
-            
-            # Try to set parameters that may not be supported
-            try:
-                # LogFileAppend parameter may not be supported, try to set
-                if hasattr(GRB.Param, 'LogFileAppend'):
-                    model.setParam(GRB.Param.LogFileAppend, cfg.gurobi.log_file_append)
-            except Exception as e:
-                logging.debug(f"Failed to set LogFileAppend: {str(e)}")
-            
-            try:
-                # DisplayInterval parameter
-                if hasattr(GRB.Param, 'DisplayInterval'):
-                    model.setParam(GRB.Param.DisplayInterval, cfg.gurobi.display_interval)
-            except Exception as e:
-                logging.debug(f"Failed to set DisplayInterval: {str(e)}")
-            
-            # Whether to use the callback function
-            callbacks_active = False
-            if cfg.gurobi.use_callback:
+    if parallel_enabled and max_workers > 1:
+        logging.info("Using %s parallel solver-info workers", max_workers)
+        if int(cfg.solve.threads) != 1:
+            logging.warning(
+                "solve.threads=%s with %s workers can exceed the intended solver budget; "
+                "GenBench-MILP comparison runs should use solve.threads=1.",
+                cfg.solve.threads,
+                max_workers,
+            )
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            future_to_instance = {
+                executor.submit(
+                    solve_instance_for_solver_info,
+                    instance_file,
+                    gurobi_logs_dir,
+                    gurobi_params,
+                    gurobi_cfg,
+                    metric_cfg,
+                ): instance_file
+                for instance_file in instance_files
+            }
+            for future in tqdm(
+                as_completed(future_to_instance),
+                total=len(future_to_instance),
+                desc="Solving progress",
+                ncols=100,
+                colour="green",
+            ):
+                instance_file = future_to_instance[future]
                 try:
-                    # Create an instance of the heuristic method callback function
-                    callback_log_file = os.path.join(gurobi_logs_dir, f"{instance_name}_heuristics.log")
-                    heuristic_callback = HeuristicCallback(callback_log_file)
-                    
-                    # Solve the instance, using the heuristic method callback function
-                    model.optimize(heuristic_callback)
-                    callbacks_active = True
-                    
-                    # Get the heuristic method data collected by the callback
-                    heuristic_stats = heuristic_callback.get_heuristic_stats()
-                    
-                    # Limit the log output, only output detailed logs when actual heuristic information is obtained
-                    if heuristic_stats['success_count']:
-                        logging.debug(f"Obtained {len(heuristic_stats['success_count'])} heuristic method success information from the callback")
-                        for method, count in heuristic_stats['success_count'].items():
-                            logging.debug(f"  - {method}: {count} times successfully")
-                except Exception as e:
-                    logging.error(f"Error executing callback function: {str(e)}")
-                    callbacks_active = False
-            
-            # If the callback function is not activated, solve normally
-            if not callbacks_active:
-                model.optimize()
-            
-            # Wait to ensure the log file is written
-            model.dispose()
-            env.dispose()
-            
-            # Parse the log file to extract metrics
-            instance_result = solver_metric.analyze_log_file(log_file)
-            
-            # If there is callback data, use the callback data first
-            if callbacks_active and heuristic_stats['success_count']:
-                # Remove the heuristic data from the log parsing (all heur_ prefixed fields)
-                for key in list(instance_result.keys()):
-                    if key.startswith('heur_'):
-                        del instance_result[key]
-                
-                # Add the heuristic method data obtained from the callback
-                for method, count in heuristic_stats['success_count'].items():
-                    instance_result[f"heur_{method}"] = count  # Use a unified heur_ prefix
-                
-                # Add the number of solutions found
-                instance_result["solutions_found"] = heuristic_stats['solutions_found']
-                
-                # Add the last used heuristic method
-                if heuristic_stats['last_solution_method']:
-                    instance_result["last_solution_method"] = heuristic_stats['last_solution_method']
-                    
-                # Add a flag indicating that the heuristic data comes from the callback
-                instance_result["heuristic_data_source"] = "callback"
-            else:
-                # Add a flag indicating that the heuristic data comes from log parsing
-                instance_result["heuristic_data_source"] = "log_parsing"
-            
-            # Add the instance name
-            instance_result["instance"] = instance_name
-            
-            # Add the results to the list
-            results.append(instance_result)
-            
-        except Exception as e:
-            logging.error(f"Error processing instance {instance_name}: {str(e)}")
-            results.append({
-                "instance": instance_name,
-                "error": str(e)
-            })
+                    results.append(future.result())
+                except Exception as exc:
+                    instance_name = os.path.basename(instance_file).split(".")[0]
+                    logging.error(f"Worker failed for instance {instance_name}: {str(exc)}")
+                    results.append({"instance": instance_name, "error": str(exc)})
+    else:
+        for instance_file in tqdm(instance_files, desc="Solving progress", ncols=100, colour="green"):
+            results.append(
+                solve_instance_for_solver_info(
+                    instance_file,
+                    gurobi_logs_dir,
+                    gurobi_params,
+                    gurobi_cfg,
+                    metric_cfg,
+                )
+            )
     
     # Save the results
     if results:

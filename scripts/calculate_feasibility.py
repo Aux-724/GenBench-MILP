@@ -36,7 +36,7 @@ logger = logging.getLogger("FeasibleRatioCalculation")
 
 def get_instances(directory: str) -> List[str]:
     """
-    Get all .lp files in the directory
+    Get all supported MILP instance files in the directory.
     
     Args:
         directory: Instance directory path
@@ -48,10 +48,12 @@ def get_instances(directory: str) -> List[str]:
         logger.error(f"Directory does not exist: {directory}")
         return []
     
-    # Recursively find all .lp files
-    instances = glob.glob(os.path.join(directory, "**", "*.lp"), recursive=True)
-    
-    return instances
+    patterns = ("*.lp", "*.mps", "*.lp.gz", "*.mps.gz")
+    instances = []
+    for pattern in patterns:
+        instances.extend(glob.glob(os.path.join(directory, "**", pattern), recursive=True))
+
+    return sorted(instances)
 
 
 def calculate_feasibility(

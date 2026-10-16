@@ -27,6 +27,9 @@ calculate_instance:
   max_instances: null  # Maximum number of instances to solve, null means read all instances
   html_report: true  # Whether to generate HTML report
   random_seed: 42  # Random seed, used for random sampling of instances
+  parallel:
+    enabled: false  # Whether to solve instances with multiple worker processes
+    processes: 64  # Number of worker processes; keep processes * solve.threads <= 150
 
 # Logging configuration
 logging:

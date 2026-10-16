@@ -3,9 +3,12 @@
 # Solving parameters
 solve:
   time_limit: 300  # Solving time limit (seconds)
-  threads: 256     # Number of threads, set to 1 for determinism
+  threads: 1       # Number of threads, fixed to 1 for determinism
   mip_gap: 1e-4   # MIP tolerance
   seed: 42       # Random seed, ensure reproducibility
+  parallel:
+    enabled: false
+    processes: 1
 
 # Gurobi specific parameters
 gurobi:

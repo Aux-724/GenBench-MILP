@@ -38,7 +38,12 @@ def load_data(file_path: str) -> pd.DataFrame:
     df = pd.read_csv(file_path)
     
     if 'root_gap' not in df.columns:
-        raise ValueError(f"File {file_path} does not contain 'root_gap' column")
+        logging.warning(
+            "File %s does not contain a root_gap column; treating it as "
+            "zero finite root-gap values",
+            file_path,
+        )
+        df['root_gap'] = np.nan
     
     return df
 
@@ -59,9 +64,13 @@ def prepare_data(df1: pd.DataFrame, df2: pd.DataFrame,
     Returns:
         (data1, data2): Prepared root_gap values from two datasets
     """
-    # Filter valid root_gap values
-    data1 = df1['root_gap'].dropna().values
-    data2 = df2['root_gap'].dropna().values
+    # Filter valid root_gap values. Some generated datasets solve at presolve
+    # and therefore do not produce a root-node gap; keep that as explicit
+    # insufficient data instead of crashing downstream.
+    data1 = pd.to_numeric(df1['root_gap'], errors='coerce').dropna().values
+    data2 = pd.to_numeric(df2['root_gap'], errors='coerce').dropna().values
+    data1 = data1[np.isfinite(data1)]
+    data2 = data2[np.isfinite(data2)]
     
     # If sampling is enabled
     if sampling == "sample":
@@ -85,6 +94,8 @@ def calculate_wasserstein_distance(data1: np.ndarray, data2: np.ndarray) -> floa
     Returns:
         Wasserstein distance
     """
+    if len(data1) == 0 or len(data2) == 0:
+        return np.nan
     return stats.wasserstein_distance(data1, data2)
 
 
@@ -98,6 +109,18 @@ def calculate_statistics(data: np.ndarray) -> Dict[str, float]:
     Returns:
         Dictionary containing statistical information
     """
+    if len(data) == 0:
+        return {
+            "count": 0,
+            "mean": np.nan,
+            "std": np.nan,
+            "min": np.nan,
+            "25%": np.nan,
+            "50%": np.nan,
+            "75%": np.nan,
+            "max": np.nan,
+        }
+
     return {
         "count": len(data),
         "mean": np.mean(data),
@@ -134,6 +157,26 @@ def visualize_comparison(data1: np.ndarray, data2: np.ndarray,
         style: Chart style
     """
     plt.style.use(style)
+
+    if len(data1) == 0 or len(data2) == 0:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.axis("off")
+        ax.text(
+            0.5,
+            0.5,
+            "Insufficient finite root_gap values\n"
+            f"{name1}: {len(data1)} valid values\n"
+            f"{name2}: {len(data2)} valid values",
+            ha="center",
+            va="center",
+            fontsize=14,
+        )
+        fig.suptitle(f"{title}\nWasserstein Distance: unavailable", fontsize=16)
+        plt.tight_layout()
+        plt.savefig(output_path)
+        plt.close()
+        logging.warning("Skipped root_gap distribution plots because one dataset has no finite root_gap values")
+        return
     
     fig, axs = plt.subplots(2, 2, figsize=figsize)
     fig.suptitle(f"{title}\nWasserstein Distance: {wasserstein_dist:.4f}", fontsize=16)

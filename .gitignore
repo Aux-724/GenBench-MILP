@@ -1,0 +1,26 @@
+data
+CLAUDE.md
+
+# Logs and runtime output
+*.log
+logs/
+outputs/
+multirun/
+gurobi.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local Codex state
+.codex
+.codex/
+
+# External / nested git projects
+ACM-MILP/
+DIG_MILP/
+L2O-G2MILP/
+MIPLIB-NL/
+OptiGuide/
+awesome-mip-generation/
+diffusion-integer-programming/

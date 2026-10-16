@@ -20,6 +20,7 @@ import logging
 import hydra
 import random
 import tqdm
+import multiprocessing
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from omegaconf import DictConfig, OmegaConf
@@ -30,6 +31,43 @@ sys.path.insert(0, project_root)
 
 # Import TimeGapMetric class from metrics
 from metrics.time_gap import TimeGapMetric
+from utils.common import solve_instance
+
+
+def solve_instance_for_time(args: tuple) -> Dict[str, Any]:
+    """Solve one instance and return the JSON-compatible result row."""
+    instance_path, time_limit, threads = args
+    instance_name = os.path.basename(instance_path)
+
+    try:
+        result = solve_instance(
+            instance_path,
+            time_limit=time_limit,
+            threads=threads,
+        )
+
+        return {
+            "instance_name": instance_name,
+            "instance_path": instance_path,
+            "solving_time": result.get("solving_time"),
+            "obj": result.get("obj"),
+            "status_name": result.get("status_name"),
+            "is_feasible": bool(result.get("is_feasible", False)),
+            "is_error": False,
+            "num_nodes": result.get("num_nodes"),
+            "num_sols": result.get("num_sols"),
+        }
+    except Exception as e:
+        logging.error(f"Error solving {instance_path}: {str(e)}")
+        return {
+            "instance_name": instance_name,
+            "instance_path": instance_path,
+            "solving_time": None,
+            "obj": None,
+            "status_name": f"ERROR: {str(e)}",
+            "is_feasible": False,
+            "is_error": True,
+        }
 
 
 def create_solving_time_visualization(solving_times: List[float], output_path: str):
@@ -179,6 +217,9 @@ def main(cfg: DictConfig):
     # Get other configuration parameters
     skip_solve = cfg.get('calculate_instance', {}).get('skip_solve', False)
     max_instances = cfg.get('calculate_instance', {}).get('max_instances', None)
+    parallel_cfg = cfg.get('calculate_instance', {}).get('parallel', {})
+    parallel_enabled = bool(parallel_cfg.get('enabled', False))
+    parallel_processes = int(parallel_cfg.get('processes', 1))
     
     print(f"=== MILP instance solving time analysis ===" )
     print(f"Original working directory: {original_cwd}" )
@@ -187,6 +228,9 @@ def main(cfg: DictConfig):
     print(f"Solving time limit: {cfg.solve.time_limit if cfg.solve.time_limit else 'no limit'}" )
     print(f"Threads: {cfg.solve.threads}")
     print(f"Skip solving: {skip_solve}")
+    print(f"Parallel solving: {parallel_enabled}")
+    if parallel_enabled:
+        print(f"Parallel processes: {parallel_processes}")
     if max_instances:
         print(f"Maximum solving instances: {max_instances}")
     
@@ -224,55 +268,69 @@ def main(cfg: DictConfig):
     # Use skip_solve parameter from configuration file
     if not skip_solve:
         print("\nSolving instances...")
-        # Use tqdm to create progress bar, without detailed instance information
-        for i, instance_path in enumerate(tqdm.tqdm(instances, desc="Solving Progress", ncols=100)):
-            instance_name = os.path.basename(instance_path)
-            
-            try:
-                solve_time, obj_value, status = metric._solve_instance(
-                    instance_path, 
-                    time_limit=cfg.solve.time_limit,
-                    threads=cfg.solve.threads
-                )
+        if parallel_enabled and len(instances) > 1:
+            num_processes = min(max(1, parallel_processes), len(instances))
+            print(f"Using {num_processes} worker processes")
+            solve_args = [
+                (instance_path, cfg.solve.time_limit, cfg.solve.threads)
+                for instance_path in instances
+            ]
+            with multiprocessing.Pool(processes=num_processes) as pool:
+                iterator = pool.imap(solve_instance_for_time, solve_args)
+                for result in tqdm.tqdm(iterator, total=len(instances), desc="Solving Progress", ncols=100):
+                    results.append(result)
+                    if result["solving_time"] is not None:
+                        solving_times.append(result["solving_time"])
+        else:
+            # Use tqdm to create progress bar, without detailed instance information
+            for i, instance_path in enumerate(tqdm.tqdm(instances, desc="Solving Progress", ncols=100)):
+                instance_name = os.path.basename(instance_path)
                 
-                # Parse status information
-                is_feasible = False
-                is_error = False
-                
-                if status is not None and "optimal" in status.lower():
-                    is_feasible = True
-                elif status is not None and "feasible" in status.lower():
-                    is_feasible = True
-                elif status is not None and "error" in status.lower():
-                    is_error = True
-                
-                # Collect results
-                result = {
-                    "instance_name": instance_name,
-                    "instance_path": instance_path,
-                    "solving_time": solve_time,
-                    "obj": obj_value,
-                    "status_name": status,
-                    "is_feasible": is_feasible,
-                    "is_error": is_error
-                }
-                
-                results.append(result)
-                
-                if solve_time is not None:
-                    solving_times.append(solve_time)
-                
-            except Exception as e:
-                print(f"Error: Solving {instance_name} failed: {str(e)}")
-                results.append({
-                    "instance_name": instance_name,
-                    "instance_path": instance_path,
-                    "solving_time": None,
-                    "obj": None,
-                    "status_name": f"ERROR: {str(e)}",
-                    "is_feasible": False,
-                    "is_error": True
-                })
+                try:
+                    solve_time, obj_value, status = metric._solve_instance(
+                        instance_path,
+                        time_limit=cfg.solve.time_limit,
+                        threads=cfg.solve.threads
+                    )
+
+                    # Parse status information
+                    is_feasible = False
+                    is_error = False
+
+                    if status is not None and "optimal" in status.lower():
+                        is_feasible = True
+                    elif status is not None and "feasible" in status.lower():
+                        is_feasible = True
+                    elif status is not None and "error" in status.lower():
+                        is_error = True
+
+                    # Collect results
+                    result = {
+                        "instance_name": instance_name,
+                        "instance_path": instance_path,
+                        "solving_time": solve_time,
+                        "obj": obj_value,
+                        "status_name": status,
+                        "is_feasible": is_feasible,
+                        "is_error": is_error
+                    }
+
+                    results.append(result)
+
+                    if solve_time is not None:
+                        solving_times.append(solve_time)
+
+                except Exception as e:
+                    print(f"Error: Solving {instance_name} failed: {str(e)}")
+                    results.append({
+                        "instance_name": instance_name,
+                        "instance_path": instance_path,
+                        "solving_time": None,
+                        "obj": None,
+                        "status_name": f"ERROR: {str(e)}",
+                        "is_feasible": False,
+                        "is_error": True
+                    })
     
     # Calculate statistics
     total_count = len(results)
